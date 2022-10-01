@@ -1,1 +1,1 @@
-# aws-ethermine
+# AWS Ethereum Classic (ETC) miner

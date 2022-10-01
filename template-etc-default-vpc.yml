@@ -1,0 +1,706 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Metadata:
+  RepoUrl: https://github.com/cyber-eternal/aws-ethermine
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Miner Configuration
+        Parameters:
+          - WalletAddress
+          - Hashrate
+
+      - Label:
+          default: Instance Configuration
+        Parameters:
+          - InstanceTypes
+          - PricingPlan
+
+Parameters:
+  InstanceTypes:
+    Description: |
+      Can be "*" to use all available, or wildcards e.g. "g4dn.*,g5.*",
+      or a list of specific instances e.g. "p3.2xlarge,p3.8xlarge", or an exclusion e.g. "-g5g.*".
+    Type: String
+    Default: "*"
+
+  Hashrate:
+    Description: |
+      Required hashrate in MH/s. AWS will start the most cost effective available
+      instances to achieve this Hashrate.
+    Type: Number
+    Default: 1000
+    MinValue: 0
+
+  WalletAddress:
+    Type: String
+    Description: Wallet Address
+    Default: "0xabe5c48ffac850c16df486f14f2036a55138beee"
+
+  PricingPlan:
+    Type: String
+    Description: Spot or On-Demand or Both
+    AllowedValues:
+      - spot
+      - ondemand
+      - both
+    Default: both
+
+Mappings:
+  ImageMap:
+    af-south-1:
+      CudaX8664: ami-086e4f2466c6a6a12
+      CudaARM64: ami-096626b5ba66b5e23
+      RadeonX8664: ami-0b72cda9a0157a2d1
+      DeepLearning: ami-0b863201ae2d10811
+    ap-east-1:
+      CudaX8664: ami-00165c52f16e24d9e
+      CudaARM64: ami-022a4f059919ef75b
+      RadeonX8664: ami-03d1bf3d3c33f6d20
+      DeepLearning: ami-01026c742061d0555
+    ap-northeast-1:
+      CudaX8664: ami-0c28d4506b37946bf
+      CudaARM64: ami-03f9c9c4f6975077f
+      RadeonX8664: ami-0920895676fcb4966
+      DeepLearning: ami-01c65cc8d340075de
+    ap-northeast-2:
+      CudaX8664: ami-0d9ae8568d2270300
+      CudaARM64: ami-0667f179106dfd615
+      RadeonX8664: ami-0f103c00fa9bafb0e
+      DeepLearning: ami-098d41704fc158cf9
+    ap-northeast-3:
+      CudaX8664: ami-0aa8173bff9f70595
+      CudaARM64: ami-0fc0d05983d8eb3de
+      RadeonX8664: ami-0061fb4cd85051d8e
+      DeepLearning: ami-02fe50b618ba8eb11
+    ap-south-1:
+      CudaX8664: ami-0910ad4b9448a7599
+      CudaARM64: ami-0c57f0ecf6276dd24
+      RadeonX8664: ami-0eeb53661d79e3b9c
+      DeepLearning: ami-0e0c9ee0efef0c6e7
+    ap-southeast-1:
+      CudaX8664: ami-0787185e0907e2144
+      CudaARM64: ami-07cafcb2cdd462df7
+      RadeonX8664: ami-00d3ca16eff5adb63
+      DeepLearning: ami-0e9e6b131cf370b03
+    ap-southeast-2:
+      CudaX8664: ami-00c71f1a1e4b7e179
+      CudaARM64: ami-0e0fda5cd11e23416
+      RadeonX8664: ami-0a04fe46aa8bcaaf7
+      DeepLearning: ami-0c21dee5e16af0a63
+    ca-central-1:
+      CudaX8664: ami-097c07bc128c01cee
+      CudaARM64: ami-02eeec8c57b742734
+      RadeonX8664: ami-04ad2df5b2bf97fd5
+      DeepLearning: ami-080127ab7a96d5442
+    eu-central-1:
+      CudaX8664: ami-031ed4dd2a0f62c91
+      CudaARM64: ami-04b079307ce2bac3b
+      RadeonX8664: ami-01f76f27dba711db3
+      DeepLearning: ami-028d4e10fae5e2d9c
+    eu-north-1:
+      CudaX8664: ami-07123667dee989f01
+      CudaARM64: ami-0287ac691e5cdf7b9
+      RadeonX8664: ami-08dc54829d51009d9
+      DeepLearning: ami-072b118476d963637
+    eu-south-1:
+      CudaX8664: ami-0d3c2d911cb96a40e
+      CudaARM64: ami-0203f39d472bf208c
+      RadeonX8664: ami-0509b68defac9d009
+      DeepLearning: ami-0a3f7de498488c104
+    eu-west-1:
+      CudaX8664: ami-0ac19908222580bb6
+      CudaARM64: ami-091ac19415b2331fe
+      RadeonX8664: ami-05f8a1fbb5cd80c47
+      DeepLearning: ami-096cf47f79196aeb7
+    eu-west-2:
+      CudaX8664: ami-005c30d6dbb99e093
+      CudaARM64: ami-0bd2f7ff6f2a6533e
+      RadeonX8664: ami-0bc7c7f3180e6e855
+      DeepLearning: ami-0e0784eb42a8182f3
+    eu-west-3:
+      CudaX8664: ami-089a99d16a575ecfd
+      CudaARM64: ami-0d94c2e2304703d49
+      RadeonX8664: ami-083e41b99285e8504
+      DeepLearning: ami-05ec8353ae3e77e65
+    me-south-1:
+      CudaX8664: ami-07c5b9ea8cf60134c
+      CudaARM64: ami-07386ff7a626d5f0b
+      RadeonX8664: ami-0927bb0fe8811cefd
+      DeepLearning: ami-09367856c60c94fc9
+    sa-east-1:
+      CudaX8664: ami-01877b4bff76f8d26
+      CudaARM64: ami-05b762e74fa40d52e
+      RadeonX8664: ami-06bf11059e19f03c9
+      DeepLearning: ami-08c45940a850aa288
+    us-east-1:
+      CudaX8664: ami-0d70b8dd4ec1e2d1e
+      CudaARM64: ami-024a46081b6c6b01f
+      RadeonX8664: ami-0476917f2861069bf
+      DeepLearning: ami-0b860b555a071dc60
+    us-east-2:
+      CudaX8664: ami-0961584a4b92639bf
+      CudaARM64: ami-0602aa492f2891ce7
+      RadeonX8664: ami-0f28b3a6ec09b33d5
+      DeepLearning: ami-09a8f1a054ef4f197
+    us-west-1:
+      CudaX8664: ami-0730c9fe3161a8f34
+      CudaARM64: ami-0d36b73bc4d48b3e3
+      RadeonX8664: ami-092ae28e6514057a0
+      DeepLearning: ami-0636fbe6103ad792a
+    us-west-2:
+      CudaX8664: ami-0d561be146bd8c20e
+      CudaARM64: ami-0181036953e9660ba
+      RadeonX8664: ami-0356d91a89300f274
+      DeepLearning: ami-083afc3c818dc14bd
+
+  CapacityAllocation:
+    spot:
+      OnDemandPct: "0"
+    both:
+      OnDemandPct: "50"
+    ondemand:
+      OnDemandPct: "100"
+
+Resources:
+  InstanceFilter:
+    Type: Custom::InstanceFilter
+    Properties:
+      ServiceToken: !GetAtt InstanceFilterLambda.Arn
+      InstanceTypesWanted: !Ref InstanceTypes
+      InstanceTypesAttributes:
+        # WeightedCapacity is the instance type Hashrate in MH/s
+        - InstanceType: g4ad.xlarge
+          WeightedCapacity: "48"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+            Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+        - InstanceType: g4ad.2xlarge
+          WeightedCapacity: "48"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+            Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+        - InstanceType: g4ad.4xlarge
+          WeightedCapacity: "48"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+            Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+          _ExcludeInRegions:
+            - ca-central-1
+            - eu-central-1
+        - InstanceType: g4ad.8xlarge
+          WeightedCapacity: "96"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+            Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+          _ExcludeInRegions:
+            - ca-central-1
+            - eu-central-1
+        - InstanceType: g4ad.16xlarge
+          WeightedCapacity: "192"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+            Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+          _ExcludeInRegions:
+            - ca-central-1
+            - eu-central-1
+        - InstanceType: g5g.xlarge
+          WeightedCapacity: "25"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateCudaARM64
+            Version: !GetAtt LaunchTemplateCudaARM64.LatestVersionNumber
+        - InstanceType: g5g.2xlarge
+          WeightedCapacity: "25"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateCudaARM64
+            Version: !GetAtt LaunchTemplateCudaARM64.LatestVersionNumber
+        - InstanceType: g5.xlarge
+          WeightedCapacity: "56"
+        - InstanceType: g5.24xlarge
+          WeightedCapacity: "226"
+        - InstanceType: g5.48xlarge
+          WeightedCapacity: "452"
+        - InstanceType: g4dn.xlarge
+          WeightedCapacity: "25"
+        - InstanceType: g4dn.2xlarge
+          WeightedCapacity: "25"
+        - InstanceType: g4dn.4xlarge
+          WeightedCapacity: "25"
+        - InstanceType: g4dn.8xlarge
+          WeightedCapacity: "100"
+        - InstanceType: g4dn.12xlarge
+          WeightedCapacity: "100"
+        - InstanceType: g4dn.16xlarge
+          WeightedCapacity: "100"
+        - InstanceType: g4dn.metal
+          WeightedCapacity: "204"
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateDeepLearning
+            Version: !GetAtt LaunchTemplateDeepLearning.LatestVersionNumber
+
+  InstanceFilterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        # Lambda source is in src/lambdas/instance-filter.py
+        ZipFile: |
+          #!/usr/bin/env python3
+          import os
+          import json
+          import urllib3
+          import datetime
+          import boto3
+          http=urllib3.PoolManager()
+          ec2=boto3.client("ec2")
+          VPC_ID=os.getenv("VPC_ID")
+          SUCCESS="SUCCESS"
+          FAILED="FAILED"
+          def send(event,context,status,data={},reason=None):
+           responseUrl=event["ResponseURL"]
+           responseBody={"Status":status,"PhysicalResourceId":context.log_stream_name,"StackId":event["StackId"],"RequestId":event["RequestId"],"LogicalResourceId":event["LogicalResourceId"],"Reason":reason or "See the details in CloudWatch Log Stream: {}".format(context.log_stream_name),}
+           if data:
+            responseBody["Data"]=data
+           json_responseBody=json.dumps(responseBody)
+           print("== RESPONSE ==")
+           print(json_responseBody)
+           headers={"content-type":"","content-length":str(len(json_responseBody))}
+           try:
+            response=http.request("PUT",responseUrl,headers=headers,body=json_responseBody)
+            print("Status code:",response.status)
+           except Exception as e:
+            print("send(..) failed executing http.request(..):",e)
+          def filter_wanted(types,wanted):
+           if wanted=="*":
+            print(f"Instance types wanted: * (=any)")
+            return True,types
+           wanted_list=list(map(lambda x:x.strip().rstrip("*").lower(),wanted.split(",")))
+           wanted_list=list(map(lambda x:x if x.find(".")>=0 else f"{x}.",wanted_list))
+           unwanted_list=list(filter(lambda x:x.startswith('-'),wanted_list))
+           wanted_list=[wt for wt in wanted_list if wt not in unwanted_list]
+           unwanted_list=[ut[1:]for ut in unwanted_list]
+           print(f"Instance types wanted: {' '.join(wanted_list)} / unwanted: {' '.join(unwanted_list)}")
+           unwanted_types=[]
+           for ut in unwanted_list:
+            unwanted_types.extend(list(filter(lambda x:x.startswith(ut),types)))
+           unwanted_types=set(unwanted_types)
+           types=list(set(types).difference(unwanted_types))
+           if not wanted_list or wanted_list=="*":
+            print(f"Instance types filtered: {' '.join(types)}")
+            return True,types
+           filtered_types=[]
+           for wt in wanted_list:
+            filtered_types.extend(list(filter(lambda x:x.startswith(wt),types)))
+           filtered_types=list(set(filtered_types)) 
+           if not filtered_types:
+            return False,"No wanted instance types match the available types."
+           print(f"Instance types filtered: {' '.join(filtered_types)}")
+           return True,filtered_types
+          def filter_available(types):
+           result=ec2.describe_instance_type_offerings(LocationType="region",Filters=[{"Name":"instance-type","Values":types}])
+           types_available=list(map(lambda x:x["InstanceType"],result["InstanceTypeOfferings"]))
+           print(f"Instance types available in this region: {' '.join(types_available)}")
+           return True,types_available
+          def sort_by_efficiency(attrs):
+           data={t["InstanceType"]:t for t in attrs}
+           result=ec2.describe_spot_price_history(InstanceTypes=list(data.keys()),ProductDescriptions=["Linux/UNIX","Linux/UNIX (Amazon VPC)"],StartTime=datetime.datetime.now()-datetime.timedelta(minutes=1),)
+           for r in result["SpotPriceHistory"]:
+            if not VPC_ID and r["ProductDescription"].endswith("(Amazon VPC)"):
+             raise Exception('Your account still supports EC2-Classic. Please deploy "template-eth-custom-vpc.yml" instead.')
+            t=r["InstanceType"]
+            if "_count" not in data[t]:
+             data[t]["_count"]=0
+             data[t]["_sum"]=0.0
+            data[t]["_count"]+=1
+            data[t]["_sum"]+=float(r["SpotPrice"])
+           for t in data.keys():
+            data[t]["_spot"]=data[t]["_sum"]/data[t]["_count"]
+            data[t]["_efficiency"]=(float(data[t].get("WeightedCapacity",1))/data[t]["_spot"])
+            del data[t]["_sum"]
+            del data[t]["_count"]
+           attrs=list(data.values())
+           attrs.sort(key=lambda x:(-x["_efficiency"],x["_spot"]))
+           print(f"Instances sorted: {json.dumps(attrs)}")
+           for a in attrs:
+            for key in list(a.keys()):
+             if key.startswith("_"):
+              del a[key]
+           return attrs
+          def lambda_handler(event,context):
+           print("== EVENT ==")
+           print(json.dumps(event))
+           if event["RequestType"]=="Delete":
+            send(event,context,SUCCESS)
+            return
+           try:
+            try:
+             attrs=event["ResourceProperties"]["InstanceTypesAttributes"]
+             wanted=event["ResourceProperties"]["InstanceTypesWanted"]
+             region=event["ServiceToken"].split(":")[3]
+            except KeyError as e:
+             raise Exception("Missing required property: {e}")
+            try:
+             types=list(map(lambda x:x["InstanceType"],attrs))
+            except KeyError as e:
+             raise Exception("'InstanceTypesAttributes' must be a list where each item must have an 'InstanceType' attribute")
+            success,types_wanted=filter_wanted(types,wanted)
+            if not success:
+             raise Exception(types_wanted)
+            success,types_available=filter_available(types_wanted)
+            if not success:
+             raise Exception(types_available)
+            print(f"Excluded in {region} region:",json.dumps([x["InstanceType"]for x in attrs if region in x.get("_ExcludeInRegions",[])]),)
+            attrs=list(filter(lambda x:x["InstanceType"]in types_available and region not in x.get("_ExcludeInRegions",[]),attrs,))
+            if not attrs:
+             raise Exception("None of the requested instance types is available in this region!")
+            attrs=sort_by_efficiency(attrs)
+            types_sorted=list(map(lambda x:x["InstanceType"],attrs))
+           except Exception as e:
+            send(event,context,FAILED,reason=f"Error: {e}")
+            return False
+           send(event,context,SUCCESS,{"InstanceTypeNames":" ".join(types_sorted),"InstanceTypeAttributes":attrs,},)
+          # Created by pyminifier (https://github.com/liftoff/pyminifier)
+
+      Handler: "index.lambda_handler"
+      Runtime: python3.9
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  AsgUpdater:
+    DependsOn:
+      - Asg
+    Type: Custom::AsgUpdater
+    Properties:
+      ServiceToken: !GetAtt AsgUpdaterLambda.Arn
+      AsgName: !Ref Asg
+      DesiredCapacity: !Ref Hashrate
+      InstanceFilter: !GetAtt InstanceFilter.InstanceTypeAttributes
+
+  AsgUpdaterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        # Lambda source is in src/lambdas/asg-updater.py
+        ZipFile: |
+          #!/usr/bin/env python3
+          import json
+          import boto3
+          import urllib3
+          http=urllib3.PoolManager()
+          asg=boto3.client("autoscaling")
+          SUCCESS="SUCCESS"
+          FAILED="FAILED"
+          def send(event,context,status,data={},reason=None):
+           responseUrl=event["ResponseURL"]
+           responseBody={"Status":status,"PhysicalResourceId":context.log_stream_name,"StackId":event["StackId"],"RequestId":event["RequestId"],"LogicalResourceId":event["LogicalResourceId"],"Reason":reason or "See the details in CloudWatch Log Stream: {}".format(context.log_stream_name),}
+           if data:
+            responseBody["Data"]=data
+           json_responseBody=json.dumps(responseBody)
+           print("== RESPONSE ==")
+           print(json_responseBody)
+           headers={"content-type":"","content-length":str(len(json_responseBody))}
+           try:
+            response=http.request("PUT",responseUrl,headers=headers,body=json_responseBody)
+            print("Status code:",response.status)
+           except Exception as e:
+            print("send(..) failed executing http.request(..):",e)
+          def lambda_handler(event,context):
+           print("== EVENT ==")
+           print(json.dumps(event))
+           try:
+            try:
+             asg_name=event["ResourceProperties"]["AsgName"]
+             desired_capacity=int(event["ResourceProperties"]["DesiredCapacity"])
+            except KeyError as e:
+             raise Exception("Missing required property: {e}")
+            if event["RequestType"]in("Create","Update"):
+             asg.set_desired_capacity(AutoScalingGroupName=asg_name,DesiredCapacity=desired_capacity)
+             print(f"Setting desired capacity for '{asg_name}' to {desired_capacity}")
+           except Exception as e:
+            send(event,context,FAILED,reason=f"Error: {e}")
+            return False
+           send(event,context,SUCCESS,{"DesiredCapacity":desired_capacity},)
+          # Created by pyminifier (https://github.com/liftoff/pyminifier)
+
+      Handler: "index.lambda_handler"
+      Runtime: python3.9
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: InstanceFilter
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstanceTypeOfferings
+                  - ec2:DescribeInstanceTypes
+                  - ec2:DescribeSpotPriceHistory
+                  - autoscaling:SetDesiredCapacity
+                Resource: "*"
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  LaunchTemplateCudaX8664:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ImageMap, !Ref "AWS::Region", CudaX8664]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -x
+                cd /tmp
+                AZID=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone-id | cut -d- -f1)
+                INSTTYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type)
+                wget -O etcminer.tar.gz https://etcminer-release.s3.amazonaws.com/0.20.0/${EtcminerTarGz}
+                tar xvfz etcminer.tar.gz
+                cd etcminer
+                case ${!AZID:0:1} in
+                  u) PREFERRED_SERVER="us1-etc";;
+                  e) PREFERRED_SERVER="eu1-etc";;
+                  a) PREFERRED_SERVER="asia1-etc";;
+                  *) PREFERRED_SERVER="us1-etc";;
+                esac
+                cat > runner.sh << __EOF__
+                #!/bin/bash -x
+                while (true); do
+                  ./etcminer ${EtcminerArgs} --exit \
+                    -P stratums://${WalletAddress}.${AWS::Region}@${!PREFERRED_SERVER}.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@us1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@eu1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@asia1-etc.ethermine.org:5555 \
+                  >> /tmp/etcminer.log 2>&1
+                  sleep 1
+                done
+                __EOF__
+                chmod +x runner.sh
+                nohup ./runner.sh &
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-U"
+
+  LaunchTemplateRadeonX8664:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ImageMap, !Ref "AWS::Region", RadeonX8664]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -x
+                cd /tmp
+                AZID=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone-id | cut -d- -f1)
+                INSTTYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type)
+                wget -O etcminer.tar.gz https://etcminer-release.s3.amazonaws.com/0.20.0/${EtcminerTarGz}
+                tar xvfz etcminer.tar.gz
+                cd etcminer
+                case ${!AZID:0:1} in
+                  u) PREFERRED_SERVER="us1-etc";;
+                  e) PREFERRED_SERVER="eu1-etc";;
+                  a) PREFERRED_SERVER="asia1-etc";;
+                  *) PREFERRED_SERVER="us1-etc";;
+                esac
+                cat > runner.sh << __EOF__
+                #!/bin/bash -x
+                while (true); do
+                  ./etcminer ${EtcminerArgs} --exit \
+                    -P stratums://${WalletAddress}.${AWS::Region}@${!PREFERRED_SERVER}.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@us1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@eu1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@asia1-etc.ethermine.org:5555 \
+                  >> /tmp/etcminer.log 2>&1
+                  sleep 1
+                done
+                __EOF__
+                chmod +x runner.sh
+                nohup ./runner.sh &
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-G"
+
+  LaunchTemplateCudaARM64:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ImageMap, !Ref "AWS::Region", CudaARM64]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -x
+                cd /tmp
+                AZID=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone-id | cut -d- -f1)
+                INSTTYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type)
+                wget -O etcminer.tar.gz https://etcminer-release.s3.amazonaws.com/0.20.0/${EtcminerTarGz}
+                tar xvfz etcminer.tar.gz
+                cd etcminer
+                case ${!AZID:0:1} in
+                  u) PREFERRED_SERVER="us1-etc";;
+                  e) PREFERRED_SERVER="eu1-etc";;
+                  a) PREFERRED_SERVER="asia1-etc";;
+                  *) PREFERRED_SERVER="us1-etc";;
+                esac
+                cat > runner.sh << __EOF__
+                #!/bin/bash -x
+                while (true); do
+                  ./etcminer ${EtcminerArgs} --exit \
+                    -P stratums://${WalletAddress}.${AWS::Region}@${!PREFERRED_SERVER}.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@us1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@eu1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@asia1-etc.ethermine.org:5555 \
+                  >> /tmp/etcminer.log 2>&1
+                  sleep 1
+                done
+                __EOF__
+                chmod +x runner.sh
+                nohup ./runner.sh &
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-aarch64.tar.gz
+                EtcminerArgs: "-U"
+
+  LaunchTemplateDeepLearning:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ImageMap, !Ref "AWS::Region", DeepLearning]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -x
+                cd /tmp
+                AZID=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone-id | cut -d- -f1)
+                INSTTYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type)
+                wget -O etcminer.tar.gz https://etcminer-release.s3.amazonaws.com/0.20.0/${EtcminerTarGz}
+                tar xvfz etcminer.tar.gz
+                cd etcminer
+                case ${!AZID:0:1} in
+                  u) PREFERRED_SERVER="us1-etc";;
+                  e) PREFERRED_SERVER="eu1-etc";;
+                  a) PREFERRED_SERVER="asia1-etc";;
+                  *) PREFERRED_SERVER="us1-etc";;
+                esac
+                cat > runner.sh << __EOF__
+                #!/bin/bash -x
+                while (true); do
+                  ./etcminer ${EtcminerArgs} --exit \
+                    -P stratums://${WalletAddress}.${AWS::Region}@${!PREFERRED_SERVER}.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@us1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@eu1-etc.ethermine.org:5555 \
+                    -P stratums://${WalletAddress}.${AWS::Region}@asia1-etc.ethermine.org:5555 \
+                  >> /tmp/etcminer.log 2>&1
+                  sleep 1
+                done
+                __EOF__
+                chmod +x runner.sh
+                nohup ./runner.sh &
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-U"
+
+  Asg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          # InstanceFilter returns the instances in an order from the most efficient
+          # hence we use the 'prioritized' allocation strategies.
+          SpotAllocationStrategy: capacity-optimized-prioritized
+          OnDemandAllocationStrategy: prioritized
+          OnDemandBaseCapacity: "0"
+          OnDemandPercentageAboveBaseCapacity:
+            !FindInMap [CapacityAllocation, !Ref PricingPlan, OnDemandPct]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateCudaX8664
+            Version: !GetAtt LaunchTemplateCudaX8664.LatestVersionNumber
+          Overrides: !GetAtt InstanceFilter.InstanceTypeAttributes
+      MinSize: 0
+      MaxSize: !Ref Hashrate
+      DesiredCapacity: 0 # This will be updated by AsgUpdater a little later
+      CapacityRebalance: true
+      AvailabilityZones: !GetAZs ""
+      HealthCheckGracePeriod: 900
+      HealthCheckType: EC2
+      MetricsCollection:
+        - Granularity: 1Minute
+      TerminationPolicies:
+        - AllocationStrategy
+        - OldestLaunchConfiguration
+      NotificationConfigurations:
+        - TopicARN: !Ref NotificationTopic
+          NotificationTypes:
+            - autoscaling:EC2_INSTANCE_LAUNCH
+            - autoscaling:EC2_INSTANCE_TERMINATE
+            - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+            - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+          PropagateAtLaunch: true
+    CreationPolicy:
+      #AutoScalingCreationPolicy:
+      #  MinSuccessfulInstancesPercent: 0
+      ResourceSignal:
+        Count: 0
+        Timeout: PT1M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        WaitOnResourceSignals: false
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+
+Outputs:
+  InstanceTypesRequested:
+    Description: List of instance types requested in the ASG (filtered by InstanceTypesWanted and regional availability)
+    Value: !GetAtt InstanceFilter.InstanceTypeNames
+
+  NotificationTopic:
+    Description: Monitoring notification topic
+    Value: !Ref NotificationTopic
+
+  DashboardUrl:
+    Description: Ethermine Dashboard URL
+    Value: !Sub "https://etc.ethermine.org/miners/${WalletAddress}/dashboard"

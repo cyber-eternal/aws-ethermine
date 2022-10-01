@@ -1,0 +1,387 @@
+# Use this template if you wish to stand up the instances in a custom VPC
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+Metadata:
+  RepoUrl: https://github.com/mludvig/aws-ethereum-miner
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Miner Configuration
+        Parameters:
+        - WalletAddress
+        - Hashrate
+
+      - Label:
+          default: Instance Configuration
+        Parameters:
+        - InstanceTypes
+        - PricingPlan
+
+      - Label:
+          default: Networking Configuration
+        Parameters:
+        - VpcId
+        - SubnetIds
+
+Parameters:
+  InstanceTypes:
+    Description: |
+      Instance types to choose from. Can be "*" to use all available, or wildcards e.g. "g4dn.*,g5.*",
+      or a list of specific instances e.g. "p3.2xlarge,p3.8xlarge", or an exclusion e.g. "-g5g.*".
+      The most cost effective combination of available instances will be used first.
+    Type: String
+    Default: "*"
+
+  Hashrate:
+    Description: |
+      Required hashrate in MH/s. AWS will start the most cost effective available
+      instances to achieve this Hashrate.
+    Type: Number
+    Default: 1000
+    MinValue: 0
+
+  WalletAddress:
+    Type: String
+    Description: Wallet Address
+    Default: "0x99b36B44cf319c9E0ed4619ee2050B21ECac2c15"
+
+  PricingPlan:
+    Type: String
+    Description: Spot or On-Demand or Both
+    AllowedValues:
+    - spot
+    - ondemand
+    - both
+    Default: both
+
+  VpcId:
+    Description: The VPC where this stack will be deployed
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: The subnets where the instances will be deployed - at least 3 subnets!
+    Type: List<AWS::EC2::Subnet::Id>
+
+Mappings:
+  ImageMap:
+    %%{ami-ids.yml}%%
+
+  CapacityAllocation:
+    spot:
+      OnDemandPct: "0"
+    both:
+      OnDemandPct: "50"
+    ondemand:
+      OnDemandPct: "100"
+
+Resources:
+  InstanceFilter:
+    Type: Custom::InstanceFilter
+    Properties:
+      ServiceToken: !GetAtt InstanceFilterLambda.Arn
+      InstanceTypesWanted: !Ref InstanceTypes
+      InstanceTypesAttributes:
+      # WeightedCapacity is the instance type Hashrate in MH/s
+      - InstanceType: g4ad.xlarge
+        WeightedCapacity: "48"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+          Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+      - InstanceType: g4ad.2xlarge
+        WeightedCapacity: "48"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+          Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+      - InstanceType: g4ad.4xlarge
+        WeightedCapacity: "48"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+          Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+        _ExcludeInRegions:
+        - ca-central-1
+        - eu-central-1
+      - InstanceType: g4ad.8xlarge
+        WeightedCapacity: "96"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+          Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+        _ExcludeInRegions:
+        - ca-central-1
+        - eu-central-1
+      - InstanceType: g4ad.16xlarge
+        WeightedCapacity: "192"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateRadeonX8664
+          Version: !GetAtt LaunchTemplateRadeonX8664.LatestVersionNumber
+        _ExcludeInRegions:
+        - ca-central-1
+        - eu-central-1
+      - InstanceType: g5g.xlarge
+        WeightedCapacity: "25"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateCudaARM64
+          Version: !GetAtt LaunchTemplateCudaARM64.LatestVersionNumber
+      - InstanceType: g5g.2xlarge
+        WeightedCapacity: "25"
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateCudaARM64
+          Version: !GetAtt LaunchTemplateCudaARM64.LatestVersionNumber
+      - InstanceType: g5.xlarge
+        WeightedCapacity: "56"
+      - InstanceType: g5.24xlarge
+        WeightedCapacity: "226"
+      - InstanceType: g5.48xlarge
+        WeightedCapacity: "452"
+      - InstanceType: g4dn.xlarge
+        WeightedCapacity: "25"
+      - InstanceType: g4dn.2xlarge
+        WeightedCapacity: "25"
+      - InstanceType: g4dn.12xlarge
+        WeightedCapacity: "100"
+      - InstanceType: g4dn.metal
+        WeightedCapacity: "204"
+      - InstanceType: p3.2xlarge
+        WeightedCapacity: "93"
+      - InstanceType: p3.8xlarge
+        WeightedCapacity: "372"
+      - InstanceType: p3.16xlarge
+        WeightedCapacity: "744"
+      - InstanceType: p3dn.24xlarge
+        WeightedCapacity: "692"
+      - InstanceType: p4d.24xlarge
+        WeightedCapacity: "999" # It's in fact ~1350 but the max value allowed here is 999
+        LaunchTemplateSpecification:
+          LaunchTemplateId: !Ref LaunchTemplateDeepLearning
+          Version: !GetAtt LaunchTemplateDeepLearning.LatestVersionNumber
+
+  InstanceFilterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        # Lambda source is in src/lambdas/instance-filter.py
+        ZipFile: |
+          %%{lambdas/instance-filter.min.py}%%
+      Handler: "index.lambda_handler"
+      Runtime: python3.9
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          VPC_ID: !Ref VpcId
+
+  AsgUpdater:
+    DependsOn:
+    - Asg
+    Type: Custom::AsgUpdater
+    Properties:
+      ServiceToken: !GetAtt AsgUpdaterLambda.Arn
+      AsgName: !Ref Asg
+      DesiredCapacity: !Ref Hashrate
+      InstanceFilter: !GetAtt InstanceFilter.InstanceTypeAttributes
+
+  AsgUpdaterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        # Lambda source is in src/lambdas/asg-updater.py
+        ZipFile: |
+          %%{lambdas/asg-updater.min.py}%%
+      Handler: "index.lambda_handler"
+      Runtime: python3.9
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: InstanceFilter
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:DescribeInstanceTypeOfferings
+            - ec2:DescribeInstanceTypes
+            - ec2:DescribeSpotPriceHistory
+            - autoscaling:SetDesiredCapacity
+            Resource: "*"
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - !Ref InstanceRole
+
+  LaunchTemplateCudaX8664:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ ImageMap, !Ref "AWS::Region", CudaX8664 ]
+        SecurityGroupIds:
+        - !Ref SecurityGroup
+        UserData:
+          'Fn::Base64':
+            'Fn::Sub':
+              - |
+                %%{user-data-etc.txt}%%
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-U"
+
+  LaunchTemplateRadeonX8664:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ ImageMap, !Ref "AWS::Region", RadeonX8664 ]
+        SecurityGroupIds:
+        - !Ref SecurityGroup
+        UserData:
+          'Fn::Base64':
+            'Fn::Sub':
+              - |
+                %%{user-data-etc.txt}%%
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-G"
+
+  LaunchTemplateCudaARM64:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ ImageMap, !Ref "AWS::Region", CudaARM64 ]
+        SecurityGroupIds:
+        - !Ref SecurityGroup
+        UserData:
+          'Fn::Base64':
+            'Fn::Sub':
+              - |
+                %%{user-data-etc.txt}%%
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-aarch64.tar.gz
+                EtcminerArgs: "-U"
+
+  LaunchTemplateDeepLearning:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [ ImageMap, !Ref "AWS::Region", DeepLearning ]
+        SecurityGroupIds:
+        - !Ref SecurityGroup
+        UserData:
+          'Fn::Base64':
+            'Fn::Sub':
+              - |
+                %%{user-data-etc.txt}%%
+              - EtcminerTarGz: etcminer-0.20.0-cuda-11-opencl-linux-x86_64.tar.gz
+                EtcminerArgs: "-U"
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Ref AWS::StackName
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value: !Ref AWS::StackName
+
+  Asg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          # InstanceFilter returns the instances in an order from the most efficient
+          # hence we use the 'prioritized' allocation strategies.
+          SpotAllocationStrategy: capacity-optimized-prioritized
+          OnDemandAllocationStrategy: prioritized
+          OnDemandBaseCapacity: "0"
+          OnDemandPercentageAboveBaseCapacity: !FindInMap [ CapacityAllocation, !Ref PricingPlan, OnDemandPct ]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref LaunchTemplateCudaX8664
+            Version: !GetAtt LaunchTemplateCudaX8664.LatestVersionNumber
+          Overrides: !GetAtt InstanceFilter.InstanceTypeAttributes
+      MinSize: 0
+      MaxSize: !Ref Hashrate
+      DesiredCapacity: 0      # This will be updated by AsgUpdater a little later
+      CapacityRebalance: true
+      VPCZoneIdentifier: !Ref SubnetIds
+      HealthCheckGracePeriod: 900
+      HealthCheckType: EC2
+      MetricsCollection:
+      - Granularity: 1Minute
+      TerminationPolicies:
+      - AllocationStrategy
+      - OldestLaunchConfiguration
+      NotificationConfigurations:
+      - TopicARN: !Ref NotificationTopic
+        NotificationTypes:
+        - autoscaling:EC2_INSTANCE_LAUNCH
+        - autoscaling:EC2_INSTANCE_TERMINATE
+        - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+        - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+      - Key: Name
+        Value: !Ref AWS::StackName
+        PropagateAtLaunch: true
+    CreationPolicy:
+      #AutoScalingCreationPolicy:
+      #  MinSuccessfulInstancesPercent: 0
+      ResourceSignal:
+        Count: 0
+        Timeout: PT1M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        WaitOnResourceSignals: false
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+
+Outputs:
+  InstanceTypesRequested:
+    Description: List of instance types requested in the ASG (filtered by InstanceTypesWanted and regional availability)
+    Value: !GetAtt InstanceFilter.InstanceTypeNames
+
+  NotificationTopic:
+    Description: Monitoring notification topic
+    Value: !Ref NotificationTopic
+
+  DashboardUrl:
+    Description: Ethermine Dashboard URL
+    Value: !Sub "https://etc.ethermine.org/miners/${WalletAddress}/dashboard"
